@@ -1,17 +1,11 @@
-// src/repositories/userRepository.js
-// Semua query database yang berhubungan dengan user
-// Layer ini HANYA boleh berisi query SQL, tidak ada business logic
-
 const { pool } = require("../config/database");
 
 const userRepository = {
-  // Cari user berdasarkan username (untuk login)
   findByUsername: async (username) => {
     const query = `
-      SELECT 
-        u.id, u.username, u.email, u.password_hash,
-        u.full_name, u.role, u.is_active,
-        u.branch_id, b.name as branch_name
+      SELECT u.id, u.username, u.email, u.password_hash,
+             u.full_name, u.role, u.is_active,
+             u.branch_id, b.name as branch_name
       FROM users u
       LEFT JOIN branches b ON u.branch_id = b.id
       WHERE u.username = $1
@@ -20,14 +14,12 @@ const userRepository = {
     return result.rows[0] || null;
   },
 
-  // Cari user berdasarkan ID
   findById: async (id) => {
     const query = `
-      SELECT 
-        u.id, u.username, u.email,
-        u.full_name, u.role, u.is_active,
-        u.branch_id, b.name as branch_name,
-        u.last_login_at, u.created_at
+      SELECT u.id, u.username, u.email,
+             u.full_name, u.role, u.is_active,
+             u.branch_id, b.name as branch_name,
+             u.last_login_at, u.created_at
       FROM users u
       LEFT JOIN branches b ON u.branch_id = b.id
       WHERE u.id = $1
@@ -36,41 +28,29 @@ const userRepository = {
     return result.rows[0] || null;
   },
 
-  // Update waktu login terakhir
   updateLastLogin: async (userId) => {
-    const query = `
-      UPDATE users 
-      SET last_login_at = NOW() 
-      WHERE id = $1
-    `;
+    const query = `UPDATE users SET last_login_at = NOW() WHERE id = $1`;
     await pool.query(query, [userId]);
   },
 
-  // Ambil semua user (untuk admin)
   findAll: async (branchId = null) => {
     let query = `
-      SELECT 
-        u.id, u.username, u.email, u.full_name,
-        u.role, u.is_active, u.last_login_at,
-        u.branch_id, b.name as branch_name,
-        u.created_at
+      SELECT u.id, u.username, u.email, u.full_name,
+             u.role, u.is_active, u.last_login_at,
+             u.branch_id, b.name as branch_name, u.created_at
       FROM users u
       LEFT JOIN branches b ON u.branch_id = b.id
     `;
     const params = [];
-
-    // Filter per cabang jika bukan superadmin
     if (branchId) {
       query += ` WHERE u.branch_id = $1`;
       params.push(branchId);
     }
-
     query += ` ORDER BY u.created_at DESC`;
     const result = await pool.query(query, params);
     return result.rows;
   },
 
-  // Buat user baru
   create: async (userData) => {
     const query = `
       INSERT INTO users (branch_id, username, email, password_hash, full_name, role)
@@ -86,6 +66,56 @@ const userRepository = {
       userData.role,
     ];
     const result = await pool.query(query, params);
+    return result.rows[0];
+  },
+
+  update: async (id, userData) => {
+    const fields = [];
+    const params = [];
+    let idx = 1;
+
+    if (userData.full_name) {
+      fields.push(`full_name = $${idx++}`);
+      params.push(userData.full_name);
+    }
+    if (userData.email) {
+      fields.push(`email = $${idx++}`);
+      params.push(userData.email);
+    }
+    if (userData.role) {
+      fields.push(`role = $${idx++}`);
+      params.push(userData.role);
+    }
+    if (userData.password_hash) {
+      fields.push(`password_hash = $${idx++}`);
+      params.push(userData.password_hash);
+    }
+    if (userData.is_active !== undefined) {
+      fields.push(`is_active = $${idx++}`);
+      params.push(userData.is_active);
+    }
+
+    if (fields.length === 0) return null;
+
+    fields.push(`updated_at = NOW()`);
+    params.push(id);
+
+    const query = `
+      UPDATE users SET ${fields.join(", ")}
+      WHERE id = $${idx}
+      RETURNING id, username, email, full_name, role, is_active, updated_at
+    `;
+    const result = await pool.query(query, params);
+    return result.rows[0];
+  },
+
+  deactivate: async (id) => {
+    const query = `
+      UPDATE users SET is_active = false, updated_at = NOW()
+      WHERE id = $1
+      RETURNING id, username, is_active
+    `;
+    const result = await pool.query(query, [id]);
     return result.rows[0];
   },
 };

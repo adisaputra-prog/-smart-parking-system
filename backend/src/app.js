@@ -11,6 +11,8 @@ const requestLogger = require("./middlewares/requestLogger");
 const { errorHandler } = require("./middlewares/errorHandler");
 const authRoutes = require("./routes/authRoutes");
 const parkingRoutes = require("./routes/parkingRoutes");
+const userRoutes = require("./routes/userRoutes");
+const lostTicketRoutes = require("./routes/lostTicketRoutes");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -31,11 +33,12 @@ app.use(
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 500,
   message: {
     success: false,
     message: "Terlalu banyak request, coba lagi nanti",
   },
+  skip: (req) => req.path === "/api/auth/login",
 });
 app.use("/api/", limiter);
 
@@ -60,6 +63,8 @@ app.get("/health", (req, res) => {
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/parking", parkingRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/lost-tickets", lostTicketRoutes);
 
 // Route tidak ditemukan
 app.use((req, res) => {

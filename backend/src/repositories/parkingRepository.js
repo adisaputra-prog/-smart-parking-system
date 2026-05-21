@@ -101,40 +101,99 @@ const parkingRepository = {
 
   // Ambil daftar kendaraan aktif (untuk dashboard)
   findActiveTickets: async (branchId) => {
-    const query = `
-      SELECT 
-        pt.id, pt.ticket_code, pt.plate_number,
-        pt.vehicle_type, pt.entry_time, pt.status,
-        EXTRACT(EPOCH FROM (NOW() - pt.entry_time))/60 AS duration_mins_so_far,
-        u.full_name as operator_name,
-        g.name as gate_entry_name
-      FROM parking_tickets pt
-      LEFT JOIN users u ON pt.operator_entry = u.id
-      LEFT JOIN gates g ON pt.gate_entry_id  = g.id
-      WHERE pt.branch_id = $1
-        AND pt.status    = 'active'
-      ORDER BY pt.entry_time DESC
-    `;
-    const result = await pool.query(query, [branchId]);
+    let query = `
+    SELECT 
+      pt.id, pt.ticket_code, pt.plate_number,
+      pt.vehicle_type, pt.entry_time, pt.status,
+      EXTRACT(EPOCH FROM (NOW() - pt.entry_time))/60 AS duration_mins_so_far,
+      u.full_name as operator_name,
+      g.name as gate_entry_name
+    FROM parking_tickets pt
+    LEFT JOIN users u ON pt.operator_entry = u.id
+    LEFT JOIN gates g ON pt.gate_entry_id  = g.id
+    WHERE pt.status = 'active'
+  `;
+    const params = [];
+    if (branchId) {
+      query += ` AND pt.branch_id = $1`;
+      params.push(branchId);
+    }
+    query += ` ORDER BY pt.entry_time DESC`;
+    const result = await pool.query(query, params);
     return result.rows;
   },
 
   // Statistik hari ini untuk dashboard
   getTodayStats: async (branchId) => {
-    const query = `
-      SELECT
-        COUNT(*) FILTER (WHERE status = 'active')                    AS active_vehicles,
-        COUNT(*) FILTER (WHERE DATE(entry_time) = CURRENT_DATE)      AS total_entry_today,
-        COUNT(*) FILTER (WHERE DATE(exit_time)  = CURRENT_DATE
-                           AND status = 'completed')                  AS total_exit_today,
-        COALESCE(SUM(fee_amount) FILTER (
-          WHERE DATE(exit_time) = CURRENT_DATE
-            AND status = 'completed'), 0)                             AS revenue_today
-      FROM parking_tickets
-      WHERE branch_id = $1
-    `;
-    const result = await pool.query(query, [branchId]);
+    let query = `
+    SELECT
+      COUNT(*) FILTER (WHERE status = 'active') AS active_vehicles,
+      COUNT(*) FILTER (WHERE DATE(entry_time) = CURRENT_DATE) AS total_entry_today,
+      COUNT(*) FILTER (WHERE DATE(exit_time) = CURRENT_DATE AND status = 'completed') AS total_exit_today,
+      COALESCE(SUM(fee_amount) FILTER (WHERE DATE(exit_time) = CURRENT_DATE AND status = 'completed'), 0) AS revenue_today
+    FROM parking_tickets
+  `;
+    const params = [];
+    if (branchId) {
+      query += ` WHERE branch_id = $1`;
+      params.push(branchId);
+    }
+    const result = await pool.query(query, params);
     return result.rows[0];
+  },
+
+  // Statistik cashflow untuk grafik (week/month/year)
+  getCashflow: async (branchId, period) => {
+    let query = "";
+    const params = branchId ? [branchId] : [];
+    const branchFilter = branchId ? "AND branch_id = $1" : "";
+
+    if (period === "week") {
+      query = `
+      SELECT
+        TO_CHAR(exit_time, 'YYYY-MM-DD') as label,
+        TO_CHAR(exit_time, 'Day') as day_name,
+        COALESCE(SUM(fee_amount), 0) as total,
+        COUNT(*) as transactions
+      FROM parking_tickets
+      WHERE status = 'completed'
+        AND exit_time >= NOW() - INTERVAL '7 days'
+        ${branchFilter}
+      GROUP BY TO_CHAR(exit_time, 'YYYY-MM-DD'), TO_CHAR(exit_time, 'Day')
+      ORDER BY label ASC
+    `;
+    } else if (period === "month") {
+      query = `
+      SELECT
+        TO_CHAR(exit_time, 'YYYY-MM-DD') as label,
+        TO_CHAR(exit_time, 'DD Mon') as day_name,
+        COALESCE(SUM(fee_amount), 0) as total,
+        COUNT(*) as transactions
+      FROM parking_tickets
+      WHERE status = 'completed'
+        AND exit_time >= NOW() - INTERVAL '30 days'
+        ${branchFilter}
+      GROUP BY TO_CHAR(exit_time, 'YYYY-MM-DD'), TO_CHAR(exit_time, 'DD Mon')
+      ORDER BY label ASC
+    `;
+    } else {
+      query = `
+      SELECT
+        TO_CHAR(exit_time, 'YYYY-MM') as label,
+        TO_CHAR(exit_time, 'Mon YYYY') as day_name,
+        COALESCE(SUM(fee_amount), 0) as total,
+        COUNT(*) as transactions
+      FROM parking_tickets
+      WHERE status = 'completed'
+        AND exit_time >= NOW() - INTERVAL '12 months'
+        ${branchFilter}
+      GROUP BY TO_CHAR(exit_time, 'YYYY-MM'), TO_CHAR(exit_time, 'Mon YYYY')
+      ORDER BY label ASC
+    `;
+    }
+
+    const result = await pool.query(query, params);
+    return result.rows;
   },
 };
 

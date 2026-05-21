@@ -73,4 +73,11 @@ router.get(
   parkingController.checkTicket,
 );
 
+// GET /api/parking/cashflow — statistik cashflow
+router.get(
+  "/cashflow",
+  authorize("superadmin", "admin", "supervisor", "cashier"),
+  parkingController.getCashflow,
+);
+
 module.exports = router;
