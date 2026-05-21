@@ -1,20 +1,30 @@
-// components/Layout/Sidebar.jsx
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import { canAccess } from "../../utils/rbac";
 
-const menu = [
-  { to: "/", icon: "📊", label: "Dashboard" },
-  { to: "/entry", icon: "🚗", label: "Kendaraan Masuk" },
-  { to: "/exit", icon: "🔍", label: "Kendaraan Keluar" },
-  { to: "/vehicles", icon: "📋", label: "Kendaraan Aktif" },
+const allMenu = [
+  { to: "/", icon: "📊", label: "Dashboard", page: "dashboard" },
+  { to: "/entry", icon: "🚗", label: "Kendaraan Masuk", page: "entry" },
+  { to: "/exit", icon: "🔍", label: "Kendaraan Keluar", page: "exit" },
+  { to: "/vehicles", icon: "📋", label: "Kendaraan Aktif", page: "vehicles" },
+  { to: "/cashflow", icon: "💹", label: "Cashflow", page: "cashflow" },
+  {
+    to: "/lost-tickets",
+    icon: "⚠️",
+    label: "Karcis Hilang",
+    page: "lost-tickets",
+  },
+  { to: "/users", icon: "👥", label: "User Management", page: "users" },
 ];
 
 const Sidebar = () => {
   const { user, logout } = useAuth();
 
+  // Filter menu berdasarkan role
+  const menu = allMenu.filter((item) => canAccess(user?.role, item.page));
+
   return (
     <aside className="w-64 bg-gray-900 min-h-screen flex flex-col">
-      {/* Logo */}
       <div className="p-6 border-b border-gray-700">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">
@@ -29,7 +39,6 @@ const Sidebar = () => {
         </div>
       </div>
 
-      {/* Menu */}
       <nav className="flex-1 p-4">
         <div className="text-gray-500 text-xs font-medium uppercase tracking-wider mb-3 px-2">
           Menu Utama
@@ -53,7 +62,6 @@ const Sidebar = () => {
         ))}
       </nav>
 
-      {/* User Info */}
       <div className="p-4 border-t border-gray-700">
         <div className="flex items-center gap-3 mb-3">
           <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white text-xs font-bold">
